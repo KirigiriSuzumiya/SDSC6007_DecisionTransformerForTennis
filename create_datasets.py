@@ -147,7 +147,7 @@ def generate_dataset(env_id, num_episodes):
     
     hf_url = f"https://huggingface.co/cleanrl/{env_id}-{exp_name}-seed1"
     dataset = data_collector.create_dataset(
-        dataset_id=f"atari/{env_id[:-len('-v5')].lower()}/expert-v0-local",
+        dataset_id=f"atari/{env_id[:-len('-v5')].lower()}/expert-v0",
         author="Yifan BU",
         author_email="boyifan1@126.com",
         algorithm_name="CleanBA PPO Impala",
