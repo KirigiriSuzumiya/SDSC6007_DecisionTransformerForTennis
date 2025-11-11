@@ -1,0 +1,5 @@
+torch
+transformers[torch]
+gymnasium[atari]
+minari[all]
+gymnasium[other]
