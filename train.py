@@ -39,7 +39,7 @@ def load_data(dataset_id:str, episodes:int, act_dim:int,
         act_dim=act_dim, 
         image_preprocess=img_preprocess
     )
-    return collator, split_samples
+    return collator, np.random.rand(len(split_samples),20)
 
 def train(epochs, batchsize, model, split_samples, collator):
     training_args = TrainingArguments(
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         transforms.Resize([224]),
         MobileNet_V3_Large_Weights.IMAGENET1K_V2.transforms(),
     ])
-    collator, split_samples = load_data('atari/tennis/expert-v11', 100, 18, img_preprocess)
+    collator, split_samples = load_data('atari/tennis/expert-v11', 50, 18, img_preprocess)
     
     config = DecisionTransformerConfig(act_dim=18)
     model = MobileNetDT(config, MobileNet_V3_Large_Weights.IMAGENET1K_V2)

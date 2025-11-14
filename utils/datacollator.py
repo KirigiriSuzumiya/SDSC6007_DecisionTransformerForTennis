@@ -21,13 +21,13 @@ class DecisionTransformerVisionDataCollator:
         # self.state_dim = len(dataset[0]["observations"][0])
         self.dataset = dataset
         # calculate dataset stats for normalization of states
-        states = []
+        # states = []
         traj_lens = []
         for obs in dataset:
-            states.extend(obs["observations"])
+            # states.extend(obs["observations"])
             traj_lens.append(len(obs["observations"]))
         self.n_traj = len(traj_lens)
-        states = np.vstack(states)
+        # states = np.vstack(states)
         # TODO: exchange with image normalization if needed
         self.image_preprocess = image_preprocess
         # self.state_mean, self.state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
