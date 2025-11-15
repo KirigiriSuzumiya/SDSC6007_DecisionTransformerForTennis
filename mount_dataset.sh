@@ -1,0 +1,1 @@
+ln -s /root/autodl-tmp/.minari/datasets ~/.minari
