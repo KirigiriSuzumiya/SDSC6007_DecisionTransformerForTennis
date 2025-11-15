@@ -71,7 +71,7 @@ if __name__ == "__main__":
         transforms.Resize([224]),
         MobileNet_V3_Large_Weights.IMAGENET1K_V2.transforms(),
     ])
-    collator, split_samples = load_data('atari/tennis/expert-v11', 50, 18, img_preprocess)
+    collator, split_samples = load_data('atari/tennis/expert-v11', 200, 18, img_preprocess)
     
     config = DecisionTransformerConfig(act_dim=18)
     model = MobileNetDT(config, MobileNet_V3_Large_Weights.IMAGENET1K_V2)
