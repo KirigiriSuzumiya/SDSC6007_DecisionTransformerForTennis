@@ -2,11 +2,12 @@ from dataclasses import dataclass
 import random
 import torch
 import numpy as np
+from .preprocess import MobileNetDTPreprocessor
 
 @dataclass
 class DecisionTransformerVisionDataCollator:
     return_tensors: str = "pt"
-    max_len: int = 20 #subsets of the episode we use for training
+    max_len: int = 50 #subsets of the episode we use for training
     # state_dim: int = 17  # size of state space
     act_dim: int = 18  # size of action space
     max_ep_len: int = 1000 # max episode length in the dataset
@@ -16,7 +17,7 @@ class DecisionTransformerVisionDataCollator:
     p_sample: np.array = None  # a distribution to take account trajectory lengths
     n_traj: int = 0 # to store the number of trajectories in the dataset
 
-    def __init__(self, dataset, act_dim, image_preprocess) -> None:
+    def __init__(self, dataset, act_dim) -> None:
         self.act_dim = act_dim
         # self.state_dim = len(dataset[0]["observations"][0])
         self.dataset = dataset
@@ -27,10 +28,14 @@ class DecisionTransformerVisionDataCollator:
             # states.extend(obs["observations"])
             traj_lens.append(len(obs["observations"]))
         self.n_traj = len(traj_lens)
-        # states = np.vstack(states)
-        # TODO: exchange with image normalization if needed
-        self.image_preprocess = image_preprocess
-        # self.state_mean, self.state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
+        
+        self.preprocessor = MobileNetDTPreprocessor(
+            mode="train",
+            act_dim=act_dim,
+            max_len=self.max_len,
+            max_ep_len=self.max_ep_len,
+            scale=self.scale
+        )
         
         traj_lens = np.array(traj_lens)
         self.p_sample = traj_lens / sum(traj_lens)
@@ -57,41 +62,20 @@ class DecisionTransformerVisionDataCollator:
         for ind in batch_inds:
             # for feature in features:
             feature = self.dataset[int(ind)]
-            si = random.randint(0, len(feature["rewards"]) - 1)
 
-            # get sequences from dataset
-            # TODO: replace with image observations
-            obs_img = [self.image_preprocess(obs) for obs in feature["observations"][si : si + self.max_len]]
-            s.append(np.array(obs_img).reshape(1, -1, 3, obs_img[0].shape[1], obs_img[0].shape[2]))  # reshape for image observations
-            one_hot_actions = np.eye(self.act_dim)[feature["actions"][si : si + self.max_len]].reshape(1, -1, self.act_dim)
-            a.append(one_hot_actions)
-            r.append(np.array(feature["rewards"][si : si + self.max_len]).reshape(1, -1, 1))
-
-            d.append(np.array(feature["dones"][si : si + self.max_len]).reshape(1, -1))
-            timesteps.append(np.arange(si, si + s[-1].shape[1]).reshape(1, -1))
-            timesteps[-1][timesteps[-1] >= self.max_ep_len] = self.max_ep_len - 1  # padding cutoff
-            rtg.append(
-                self._discount_cumsum(np.array(feature["rewards"][si:]), gamma=1.0)[
-                    : s[-1].shape[1]   # TODO check the +1 removed here
-                ].reshape(1, -1, 1)
+            s_curr, a_curr, r_curr, d_curr, rtg_curr, timesteps_curr, mask_curr = self.preprocessor(
+                feature["observations"],
+                feature["rewards"],
+                feature["actions"],
+                feature["dones"]
             )
-            if rtg[-1].shape[1] < s[-1].shape[1]:
-                print("if true")
-                rtg[-1] = np.concatenate([rtg[-1], np.zeros((1, 1, 1))], axis=1)
-
-            # padding and state + reward normalization
-            tlen = s[-1].shape[1]
-            s[-1] = np.concatenate([np.zeros((1, self.max_len - tlen, 3, s[-1].shape[3], s[-1].shape[4])), s[-1]], axis=1)
-            # s[-1] = (s[-1] - self.state_mean) / self.state_std
-            a[-1] = np.concatenate(
-                [np.ones((1, self.max_len - tlen, self.act_dim)) * -10.0, a[-1]],
-                axis=1,
-            )
-            r[-1] = np.concatenate([np.zeros((1, self.max_len - tlen, 1)), r[-1]], axis=1)
-            d[-1] = np.concatenate([np.ones((1, self.max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, self.max_len - tlen, 1)), rtg[-1]], axis=1) / self.scale
-            timesteps[-1] = np.concatenate([np.zeros((1, self.max_len - tlen)), timesteps[-1]], axis=1)
-            mask.append(np.concatenate([np.zeros((1, self.max_len - tlen)), np.ones((1, tlen))], axis=1))
+            s.extend(s_curr)
+            a.extend(a_curr)
+            r.extend(r_curr)
+            d.extend(d_curr)
+            rtg.extend(rtg_curr)
+            timesteps.extend(timesteps_curr)
+            mask.extend(mask_curr)
 
         s = torch.from_numpy(np.concatenate(s, axis=0)).float()
         a = torch.from_numpy(np.concatenate(a, axis=0)).float()

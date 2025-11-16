@@ -15,33 +15,28 @@ def load_data(dataset_id:str, episodes:int, act_dim:int,
     print(f"env action space: {dataset.action_space}")
 
     print(f"sample {episodes} episodes from dataset {dataset_id}...")
-    samples = dataset.sample_episodes(n_episodes=episodes)
+    episodes = dataset.sample_episodes(n_episodes=episodes)
     
-    split_samples = []
-    for sample in tqdm(samples, desc="split samples from episodes"):
-        nozero_idxs = np.where(sample.rewards != 0)[0]
-        start = 0
-        for nonzero_idx in nozero_idxs:
-            split_sample = {
-                "score": sample.rewards[nonzero_idx],
-                "rewards": sample.rewards[start:nonzero_idx+1],
-                "actions": sample.actions[start:nonzero_idx+1],
-                "observations": sample.observations[start:nonzero_idx+1],
-                "dones": [0]*(nonzero_idx - start) + [1]
+    samples = []
+    for episode in tqdm(episodes, desc="origanize episodes"):
+        for start in range(0, len(episode.actions), 1000):
+            end = min(start+1000, len(episode.actions)-1)
+            sample = {
+                "score": np.sum(episode.rewards[start:end]),
+                "rewards": episode.rewards[start:end],
+                "actions": episode.actions[start:end],
+                "observations": episode.observations[start:end],
+                "dones": [0]*(len(episode.actions[start:end])-1) + [1]
             }
-            split_samples.append(split_sample)
-            start = nonzero_idx + 1
+            samples.append(sample)
     
-    print(f"splite {len(split_samples)} samples")
-    print(f"img preprocess: {img_preprocess}")
     collator = DecisionTransformerVisionDataCollator(
-        split_samples, 
+        samples, 
         act_dim=act_dim, 
-        image_preprocess=img_preprocess
     )
-    return collator, np.random.rand(len(split_samples),20)
+    return collator, np.random.rand(len(samples)*10, 1)
 
-def train(epochs, batchsize, model, split_samples, collator):
+def train(epochs, batchsize, model, samples, collator):
     training_args = TrainingArguments(
         output_dir="output/tennis/",
         remove_unused_columns=False,
@@ -58,7 +53,7 @@ def train(epochs, batchsize, model, split_samples, collator):
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset= split_samples,
+        train_dataset= samples,
         data_collator=collator,
     )
     train_out = trainer.train()
@@ -71,9 +66,9 @@ if __name__ == "__main__":
         transforms.Resize([224]),
         MobileNet_V3_Large_Weights.IMAGENET1K_V2.transforms(),
     ])
-    collator, split_samples = load_data('atari/tennis/expert-v11', 200, 18, img_preprocess)
+    collator, samples = load_data('atari/tennis/expert-v11', 100, 18, img_preprocess)
     
     config = DecisionTransformerConfig(act_dim=18)
     model = MobileNetDT(config, MobileNet_V3_Large_Weights.IMAGENET1K_V2)
-    train(50, 16, model, split_samples, collator)
+    train(50, 8, model, samples, collator)
     

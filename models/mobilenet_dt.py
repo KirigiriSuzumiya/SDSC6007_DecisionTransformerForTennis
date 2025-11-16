@@ -13,7 +13,7 @@ class MobileNetDT(DecisionTransformerModel):
         self.embed_state = nn.Sequential(
             nn.Flatten(start_dim=0, end_dim=1),
             pretrained_mobilenet,
-            nn.Unflatten(dim=0, unflattened_size=(-1, 20)),
+            nn.Unflatten(dim=0, unflattened_size=(-1, 50)),
         )
 
     def forward(self, **kwargs):
@@ -26,8 +26,9 @@ class MobileNetDT(DecisionTransformerModel):
         action_preds = action_preds.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
         action_targets = action_targets.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
         loss = torch.nn.CrossEntropyLoss()(action_preds, torch.argmax(action_targets, dim=1))
+        latest_action = torch.argmax(action_preds[-1])
 
-        return {"loss": loss}
+        return {"loss": loss, "current_action":latest_action}
 
     def original_forward(self, **kwargs):
         return super().forward(**kwargs)
