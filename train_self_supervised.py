@@ -134,7 +134,7 @@ def self_supervised_train(
 if __name__ == "__main__":
     model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-22400"
     self_supervised_round = 5
-    sample_episodes = 1
+    sample_episodes = 10
     
     if torch.cuda.is_available():
         device = torch.device("cuda:0")

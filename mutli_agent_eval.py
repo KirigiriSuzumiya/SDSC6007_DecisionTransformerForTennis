@@ -28,7 +28,7 @@ def sample_dataset_using_model(
     save_video:bool=True,
     agent_ids = ["first_0", "second_0"],
     return_dataset:bool=False ,
-    max_step:int=1000,
+    max_step:int=10*1000,
 ):
     env = tennis_v3.parallel_env()
     env = supersuit.frame_skip_v0(env, 4)
