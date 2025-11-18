@@ -2,6 +2,14 @@ from transformers import DecisionTransformerConfig, DecisionTransformerModel
 from torchvision import models
 from torch import nn
 import torch
+from torchvision import transforms
+from torchvision.models import MobileNet_V3_Large_Weights
+
+mobilenet_transforms = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize([224]),
+    MobileNet_V3_Large_Weights.IMAGENET1K_V2.transforms(),
+])
 
 class MobileNetDT(DecisionTransformerModel):
     def __init__(self, config, pretrain_weights=models.MobileNet_V3_Large_Weights.IMAGENET1K_V2):

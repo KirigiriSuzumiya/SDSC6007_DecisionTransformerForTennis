@@ -7,17 +7,17 @@ from .preprocess import MobileNetDTPreprocessor
 @dataclass
 class DecisionTransformerVisionDataCollator:
     return_tensors: str = "pt"
-    max_len: int = 50 #subsets of the episode we use for training
+    max_len: int = 100 #subsets of the episode we use for training
     # state_dim: int = 17  # size of state space
     act_dim: int = 18  # size of action space
-    max_ep_len: int = 1000 # max episode length in the dataset
+    max_ep_len: int = 4096 # max episode length in the dataset
     scale: float = 1000.0  # normalization of rewards/returns
     state_mean: np.array = None  # to store state means
     state_std: np.array = None  # to store state stds
     p_sample: np.array = None  # a distribution to take account trajectory lengths
     n_traj: int = 0 # to store the number of trajectories in the dataset
 
-    def __init__(self, dataset, act_dim) -> None:
+    def __init__(self, dataset, act_dim, img_preprocess, stack_frame:int=None) -> None:
         self.act_dim = act_dim
         # self.state_dim = len(dataset[0]["observations"][0])
         self.dataset = dataset
@@ -34,7 +34,9 @@ class DecisionTransformerVisionDataCollator:
             act_dim=act_dim,
             max_len=self.max_len,
             max_ep_len=self.max_ep_len,
-            scale=self.scale
+            scale=self.scale,
+            stack_frame=stack_frame,
+            img_preprocess=img_preprocess
         )
         
         traj_lens = np.array(traj_lens)

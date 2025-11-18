@@ -2,15 +2,20 @@ import minari
 from tqdm import tqdm
 import numpy as np
 from utils.datacollator import DecisionTransformerVisionDataCollator
+from utils.framestack import frame_stack
+from utils.sample_by_rate import sample_by_ratio
 from torchvision import transforms
 from transformers import Trainer, TrainingArguments
 from torchvision.models import MobileNet_V3_Large_Weights
-from models.mobilenet_dt import MobileNetDT
+from models.mobilenet_dt import MobileNetDT, mobilenet_transforms
+from models.vision_dt import VisualDT, vision_transforms
 from transformers import DecisionTransformerConfig
 
 
 def load_data(dataset_id:str, episodes:int, act_dim:int, 
-              img_preprocess)->DecisionTransformerVisionDataCollator:
+              img_preprocess,
+              stack_frame:int=None
+)->DecisionTransformerVisionDataCollator:
     dataset = minari.load_dataset(dataset_id)
     print(f"env action space: {dataset.action_space}")
 
@@ -19,22 +24,26 @@ def load_data(dataset_id:str, episodes:int, act_dim:int,
     
     samples = []
     for episode in tqdm(episodes, desc="origanize episodes"):
-        for start in range(0, len(episode.actions), 1000):
-            end = min(start+1000, len(episode.actions)-1)
+        nozero_idxs = np.where(episode.rewards != 0)[0]
+        start = 0
+        for end in nozero_idxs:
             sample = {
-                "score": np.sum(episode.rewards[start:end]),
-                "rewards": episode.rewards[start:end],
-                "actions": episode.actions[start:end],
-                "observations": episode.observations[start:end],
-                "dones": [0]*(len(episode.actions[start:end])-1) + [1]
+                "score": episode.rewards[end],
+                "rewards": episode.rewards[start:end+1],
+                "actions": episode.actions[start:end+1],
+                "observations": episode.observations[start:end+1],
+                "dones": [0]*(len(episode.actions[start:end+1])-1) + [1]
             }
             samples.append(sample)
     
+    samples = sample_by_ratio(samples)
     collator = DecisionTransformerVisionDataCollator(
         samples, 
         act_dim=act_dim, 
+        stack_frame=stack_frame,
+        img_preprocess=img_preprocess
     )
-    return collator, np.random.rand(len(samples)*10, 1)
+    return collator, np.random.rand(len(samples), 1)
 
 def train(epochs, batchsize, model, samples, collator):
     training_args = TrainingArguments(
@@ -42,12 +51,16 @@ def train(epochs, batchsize, model, samples, collator):
         remove_unused_columns=False,
         num_train_epochs=epochs,
         per_device_train_batch_size=batchsize,
-        learning_rate=1e-4,
-        weight_decay=1e-4,
+        learning_rate= 1e-3,
+        weight_decay=0.1,
         warmup_ratio=0.1,
         optim="adamw_torch",
+        adam_beta1=0.9,
+        adam_beta2=0.95,
         max_grad_norm=0.25,
-        logging_strategy="epoch",
+        logging_dir="output/logs", # Directory for TensorBoard logs
+        logging_steps=10, # Log every 10 steps
+        report_to=["tensorboard"],
     )
 
     trainer = Trainer(
@@ -56,19 +69,32 @@ def train(epochs, batchsize, model, samples, collator):
         train_dataset= samples,
         data_collator=collator,
     )
-    train_out = trainer.train()
+    train_out = trainer.train(resume_from_checkpoint="/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-10500")
     return train_out
     
 
-if __name__ == "__main__":
-    img_preprocess = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize([224]),
-        MobileNet_V3_Large_Weights.IMAGENET1K_V2.transforms(),
-    ])
-    collator, samples = load_data('atari/tennis/expert-v11', 100, 18, img_preprocess)
+# if __name__ == "__main__":
     
-    config = DecisionTransformerConfig(act_dim=18)
-    model = MobileNetDT(config, MobileNet_V3_Large_Weights.IMAGENET1K_V2)
-    train(50, 8, model, samples, collator)
+#     collator, samples = load_data('atari/tennis/expert-v11', 100, 18, mobilenet_transforms)
+    
+#     config = DecisionTransformerConfig(
+#         act_dim=18,
+#         n_head=8,
+#         n_layer=12,
+#         hidden_size=256,
+#     )
+#     model = MobileNetDT(config, MobileNet_V3_Large_Weights.IMAGENET1K_V2)
+#     train(100, 8, model, samples, collator)
+    
+if __name__ == "__main__":
+    collator, samples = load_data('atari/tennis/expert-v11', 100, 18, vision_transforms, 4)
+    
+    config = DecisionTransformerConfig(
+        act_dim=18,
+        n_head=16,
+        n_layer=12,
+        hidden_size=512,
+    )
+    model = VisualDT(config)
+    train(100, 16, model, samples, collator)
     

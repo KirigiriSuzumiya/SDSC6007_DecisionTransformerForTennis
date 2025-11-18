@@ -6,6 +6,7 @@ from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 from tqdm import tqdm
 import numpy as np
 from utils.preprocess import MobileNetDTPreprocessor
+from models.vision_dt import VisualDT,vision_transforms
 from transformers import AutoConfig
 def sample_dataset_using_model(
     save_path, 
@@ -36,6 +37,7 @@ def sample_dataset_using_model(
         obseration, reward, terminated, truncated, info = env.step(0)
         observations = [obseration]
         rewards = [reward]
+        reward_out = 0
         actions = [0]
         dones = [False]
         while not done:
@@ -59,6 +61,12 @@ def sample_dataset_using_model(
             action = int(out["current_action"].cpu())
             
             obs, rew, terminated, truncated, info = env.step(action)
+            if int(rew) != 0:
+                reward_out += int(rew)
+                observations = []
+                rewards = []
+                actions = []
+                dones = []
             done = terminated or truncated
             observations.append(obs)
             rewards.append(rew)
@@ -76,19 +84,18 @@ def sample_dataset_using_model(
             requirements=["gymnasium[atari,accept-rom-license]"]
         )
     env.close()
-    reward_out = int(np.sum(np.array(rewards)))
     return reward_out,
 
 
 if __name__ == "__main__":
-    save_path = "/root/autodl-tmp/record/checkpoint-13650"
-    model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-13650"
+    save_path = "./output/record/checkpoint-10500"
+    model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-10500"
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
     config = AutoConfig.from_pretrained(model_path)
-    model = MobileNetDT.from_pretrained(model_path, config)
+    model = VisualDT.from_pretrained(model_path, config=config)
     model.to(device)
     model.eval()
     
@@ -101,6 +108,9 @@ if __name__ == "__main__":
     preprocessor = MobileNetDTPreprocessor(
         mode='eval',
         act_dim=18,
+        img_preprocess=vision_transforms,
+        stack_frame=4,
+        max_len=100,
     )
     
     out = sample_dataset_using_model(
@@ -110,7 +120,7 @@ if __name__ == "__main__":
         num_episodes=1,
         preprocessor=preprocessor,
         description="mobilenet dt checkpoint-13650",
-        dataset_id="atari/tennis/naive-v0",
+        # dataset_id="atari/tennis/naive-v0",
         device=device,
     )
     print(out)
