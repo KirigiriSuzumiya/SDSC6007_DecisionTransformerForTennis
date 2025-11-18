@@ -4,3 +4,5 @@ gymnasium[atari]
 minari[all]
 gymnasium[other]
 flax
+supersuit
+pettingzoo[atari]

@@ -88,8 +88,8 @@ def sample_dataset_using_model(
 
 
 if __name__ == "__main__":
-    save_path = "./output/record/checkpoint-10500"
-    model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-10500"
+    save_path = "./output/record/checkpoint-22400"
+    model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-22400"
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
     else:
