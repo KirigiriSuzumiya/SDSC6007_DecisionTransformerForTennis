@@ -41,6 +41,8 @@ def train(epochs, batchsize, model, samples, collator):
         output_dir="output/tennis/",
         remove_unused_columns=False,
         num_train_epochs=epochs,
+        save_strategy="epoch",
+        save_total_limit=2,
         per_device_train_batch_size=batchsize,
         learning_rate= 1e-3,
         weight_decay=0.1,
@@ -54,13 +56,17 @@ def train(epochs, batchsize, model, samples, collator):
         report_to=["tensorboard"],
     )
 
+    from utils.eval_callbacks import EvalEveryNEpochsCallback
+
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset= samples,
         data_collator=collator,
     )
-    train_out = trainer.train(resume_from_checkpoint="/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-10500")
+    eval_callback = EvalEveryNEpochsCallback(trainer, n=5, max_step=1000)
+    trainer.add_callback(eval_callback)
+    train_out = trainer.train()
     return train_out
     
 

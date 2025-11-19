@@ -114,7 +114,7 @@ def self_supervised_train(
         sample_dataset_using_model(
             video_save_path, 
             model=model, 
-            num_episodes=sample_episodes//2, 
+            num_episodes=sample_episodes//5*3, 
             device=device,
             preprocessor=eval_preprocessor,
             dataset_id=dataset_id,
@@ -126,7 +126,7 @@ def self_supervised_train(
         episodes_data = sample_mutli_agent_dataset_using_model(
             save_path=video_save_path,
             model=model,
-            num_episodes=sample_episodes//2,
+            num_episodes=sample_episodes//5*2,
             preprocessor=eval_preprocessor,
             device=device,
             save_video=True,
@@ -145,7 +145,7 @@ def self_supervised_train(
             img_preprocess=vision_transforms
         )
         
-        train(10, 16, model, samples, collactor, model_save_path)
+        train(30, 16, model, samples, collactor, model_save_path)
     
     
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ def sample_dataset_using_model(
     description:str="MobileNetDT",
     dataset_id:str=None,
     save_video:bool=True,
+    max_step:int=10**100,
 ):
     ori_dataset = minari.load_dataset('atari/tennis/expert-v11')
     env = ori_dataset.recover_environment(
@@ -33,6 +34,7 @@ def sample_dataset_using_model(
     if dataset_id:
         env = DataCollector(env, record_infos=False)
     
+    total_steps = 0
     for _ in tqdm(range(num_episodes), desc="Generating single agent episodes"):
         episodic_return = 0
         env.reset()
@@ -41,7 +43,10 @@ def sample_dataset_using_model(
         obseration, reward, terminated, truncated, info = env.step(0)
         observations = [obseration]
         rewards = [reward]
-        reward_out = 0
+        reward_out = {
+            "win": 0,
+            "loss": 0,
+        }
         actions = [0]
         dones = [False]
         while not done:
@@ -65,13 +70,17 @@ def sample_dataset_using_model(
             action = int(out["current_action"].cpu())
             
             obs, rew, terminated, truncated, info = env.step(action)
+            total_steps += 1
             if int(rew) != 0:
-                reward_out += int(rew)
+                if int(rew) > 0:
+                    reward_out["win"] += 1
+                else:
+                    reward_out["loss"] += 1
                 observations = []
                 rewards = []
                 actions = []
                 dones = []
-            done = terminated or truncated
+            done = terminated or truncated or total_steps >= max_step
             observations.append(obs)
             rewards.append(rew)
             actions.append(action)
@@ -88,7 +97,7 @@ def sample_dataset_using_model(
             requirements=["gymnasium[atari,accept-rom-license]"]
         )
     env.close()
-    return reward_out,
+    return reward_out["win"] / (reward_out["loss"] + reward_out["win"] + 1e-5)
 
 
 if __name__ == "__main__":
