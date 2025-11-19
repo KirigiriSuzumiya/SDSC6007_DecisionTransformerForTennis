@@ -19,7 +19,7 @@ def extract_envstep_by_agents(agents_name, observation, reward):
         return swap_colors(observation[agents_name], [117, 128, 240], [240, 128, 128]), reward[agents_name]
     return 
 
-def sample_dataset_using_model(
+def sample_mutli_agent_dataset_using_model(
     save_path, 
     model:MobileNetDT, 
     num_episodes, 
@@ -28,14 +28,14 @@ def sample_dataset_using_model(
     save_video:bool=True,
     agent_ids = ["first_0", "second_0"],
     return_dataset:bool=False ,
-    max_step:int=10*1000,
+    max_step:int=10**1000,
 ):
     env = tennis_v3.parallel_env()
     env = supersuit.frame_skip_v0(env, 4)
     env.reset()
     
     episodes_data = []
-    for episode_idx in tqdm(range(num_episodes), desc="Generating episodes"):
+    for episode_idx in tqdm(range(num_episodes), desc="Generating multi agent episodes"):
         episode_steps = [] 
         episode_total_reward = 0
         env.reset()
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         max_len=100,
     )
     
-    out = sample_dataset_using_model(
+    out = sample_mutli_agent_dataset_using_model(
         save_path=save_path,
         model=model,
         num_episodes=1,

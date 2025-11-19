@@ -1,25 +1,23 @@
-import minari
+import torch
 from tqdm import tqdm
-import numpy as np
 from utils.datacollator import DecisionTransformerVisionDataCollator
-from utils.framestack import frame_stack
 from utils.sample_by_rate import sample_by_ratio
 from transformers import Trainer, TrainingArguments
 from transformers import AutoConfig
-from models.vision_dt import VisualDT, vision_transforms
-from mutli_agent_eval import sample_dataset_using_model, extract_envstep_by_agents
+import random
 from tqdm import tqdm
-import numpy as np
+import os
+
 from utils.preprocess import MobileNetDTPreprocessor
 from utils.swap_color import swap_colors
 from models.vision_dt import VisualDT,vision_transforms
-import torch
+from models.vision_dt import VisualDT, vision_transforms
+from mutli_agent_eval import sample_mutli_agent_dataset_using_model, extract_envstep_by_agents
+from eval import sample_dataset_using_model
+from train import load_data
 
 
-def load_data(dataset, act_dim:int, 
-              img_preprocess,
-              stack_frame:int=None
-)->DecisionTransformerVisionDataCollator:
+def load_multi_agent_data(dataset):
     samples = []
     for episode in tqdm(dataset, desc="origanize episodes"):
         curr = 0
@@ -62,21 +60,16 @@ def load_data(dataset, act_dim:int,
                     pass
     
     samples = sample_by_ratio(samples)
-    collator = DecisionTransformerVisionDataCollator(
-        samples, 
-        act_dim=act_dim, 
-        stack_frame=stack_frame,
-        img_preprocess=img_preprocess
-    )
-    return collator, np.random.rand(len(samples)*5, 1)
+    
+    return samples
 
-def train(epochs, batchsize, model, samples, collator):
+def train(epochs, batchsize, model, samples, collator, output_dir="output/self_supervised_tennis/"):
     training_args = TrainingArguments(
-        output_dir="output/self_supervised_tennis/",
+        output_dir=output_dir,
         remove_unused_columns=False,
         num_train_epochs=epochs,
         per_device_train_batch_size=batchsize,
-        learning_rate= 6 * 1e-4,
+        learning_rate= 1e-4,
         weight_decay=0.1,
         warmup_ratio=0.1,
         optim="adamw_torch",
@@ -99,9 +92,9 @@ def train(epochs, batchsize, model, samples, collator):
     
 def self_supervised_train(
     model:VisualDT, 
-    save_path:str, 
     device,
-    sample_episodes
+    sample_episodes,
+    num_rounds:int=10,
 ):
     model.eval()
     eval_preprocessor = MobileNetDTPreprocessor(
@@ -111,24 +104,48 @@ def self_supervised_train(
         stack_frame=4,
         max_len=100,
     )
-    
-    episodes_data = sample_dataset_using_model(
-        save_path=save_path,
-        model=model,
-        num_episodes=sample_episodes,
-        preprocessor=eval_preprocessor,
-        device=device,
-        save_video=True,
-        return_dataset=True,
-    )
-    # TODO
-    collactor, samples = load_data(
-        episodes_data,
-        18,
-        vision_transforms,
-        stack_frame=4
-    )
-    train(10, 16, model, samples, collactor)
+    for round in range(num_rounds):
+        print(f"sampling round {round}...")
+        video_save_path = os.path.join("output/record", f"round-{round}")
+        model_save_path = os.path.join("output/self_supervised_tennis/", f"round-{round}")
+        
+        # sample agent dataset
+        dataset_id = f"atari/tennis/selfsupervised-v{round}"
+        sample_dataset_using_model(
+            video_save_path, 
+            model=model, 
+            num_episodes=sample_episodes//2, 
+            device=device,
+            preprocessor=eval_preprocessor,
+            dataset_id=dataset_id,
+            save_video=True,
+        )
+        single_agent_samples = load_data(dataset_id, sample_episodes//2)
+        
+        # sample multi-agent dataset
+        episodes_data = sample_mutli_agent_dataset_using_model(
+            save_path=video_save_path,
+            model=model,
+            num_episodes=sample_episodes//2,
+            preprocessor=eval_preprocessor,
+            device=device,
+            save_video=True,
+            return_dataset=True,
+        )
+        mutli_agent_samples = load_multi_agent_data(episodes_data)
+        
+        print(f"{len(mutli_agent_samples)} samples from mutli-agent sampling, {len(single_agent_samples)} samples from single-agent sampling.")
+        samples = mutli_agent_samples + single_agent_samples
+        random.shuffle(samples)
+        
+        collactor = DecisionTransformerVisionDataCollator(
+            samples, 
+            act_dim=18, 
+            stack_frame=4,
+            img_preprocess=vision_transforms
+        )
+        
+        train(10, 16, model, samples, collactor, model_save_path)
     
     
 if __name__ == "__main__":
@@ -144,12 +161,11 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(model_path)
     model = VisualDT.from_pretrained(model_path, config=config)
     model.to(device)
-    for round in range(self_supervised_round):
-        print(f"self_supervised_round {round}:")
-        self_supervised_train(
-            model, 
-            save_path="/root/SDSC6007_DecisionTransformerForTennis/output/record/self_supervised-training",
-            device=device,
-            sample_episodes=sample_episodes
-        )
+    
+    self_supervised_train(
+        model,
+        device=device,
+        sample_episodes=sample_episodes,
+        num_rounds=self_supervised_round,
+    )
     

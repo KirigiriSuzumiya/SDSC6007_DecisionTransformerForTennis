@@ -10,7 +10,6 @@ from models.vision_dt import VisualDT,vision_transforms
 from transformers import AutoConfig
 def sample_dataset_using_model(
     save_path, 
-    env, 
     model:MobileNetDT, 
     num_episodes, 
     device,
@@ -19,17 +18,22 @@ def sample_dataset_using_model(
     dataset_id:str=None,
     save_video:bool=True,
 ):
+    ori_dataset = minari.load_dataset('atari/tennis/expert-v11')
+    env = ori_dataset.recover_environment(
+        eval_env=True,
+        render_mode="rgb_array",
+    )
     if save_video:
         env = RecordVideo(
             env,
             video_folder=save_path,    # Folder to save videos
-            name_prefix="eval",               # Prefix for video filenames
+            name_prefix="singleagent",               # Prefix for video filenames
             episode_trigger=lambda x: True    # Record every episode
         )
     if dataset_id:
         env = DataCollector(env, record_infos=False)
     
-    for _ in tqdm(range(num_episodes), desc="Generating episodes"):
+    for _ in tqdm(range(num_episodes), desc="Generating single agent episodes"):
         episodic_return = 0
         env.reset()
         done = False
@@ -99,11 +103,7 @@ if __name__ == "__main__":
     model.to(device)
     model.eval()
     
-    ori_dataset = minari.load_dataset('atari/tennis/expert-v11')
-    env = ori_dataset.recover_environment(
-        eval_env=True,
-        render_mode="rgb_array",
-    )
+    
     
     preprocessor = MobileNetDTPreprocessor(
         mode='eval',
@@ -115,7 +115,6 @@ if __name__ == "__main__":
     
     out = sample_dataset_using_model(
         save_path=save_path,
-        env=env,
         model=model,
         num_episodes=1,
         preprocessor=preprocessor,
