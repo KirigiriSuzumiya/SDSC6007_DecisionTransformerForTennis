@@ -64,7 +64,7 @@ def train(epochs, batchsize, model, samples, collator):
         train_dataset= samples,
         data_collator=collator,
     )
-    eval_callback = EvalEveryNEpochsCallback(trainer, n=5, max_step=1000)
+    eval_callback = EvalEveryNEpochsCallback(trainer, n=1, max_step=2000)
     trainer.add_callback(eval_callback)
     train_out = trainer.train()
     return train_out

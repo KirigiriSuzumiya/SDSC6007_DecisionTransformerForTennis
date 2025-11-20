@@ -63,11 +63,14 @@ def load_multi_agent_data(dataset):
     
     return samples
 
-def train(epochs, batchsize, model, samples, collator, output_dir="output/self_supervised_tennis/"):
+def train(epochs, batchsize, model, samples, collator, round):
+    output_dir=f"output/self_supervised_tennis/round-{round}"
     training_args = TrainingArguments(
         output_dir=output_dir,
         remove_unused_columns=False,
         num_train_epochs=epochs,
+        save_strategy="epoch",
+        save_total_limit=2,
         per_device_train_batch_size=batchsize,
         learning_rate= 1e-4,
         weight_decay=0.1,
@@ -76,10 +79,12 @@ def train(epochs, batchsize, model, samples, collator, output_dir="output/self_s
         adam_beta1=0.9,
         adam_beta2=0.95,
         max_grad_norm=0.25,
-        logging_dir="output/logs", # Directory for TensorBoard logs
+        logging_dir=f"output/logs/self-supervised/round-{round}", # Directory for TensorBoard logs
         logging_steps=10, # Log every 10 steps
         report_to=["tensorboard"],
     )
+
+    from utils.eval_callbacks import EvalEveryNEpochsCallback
 
     trainer = Trainer(
         model=model,
@@ -87,6 +92,8 @@ def train(epochs, batchsize, model, samples, collator, output_dir="output/self_s
         train_dataset= samples,
         data_collator=collator,
     )
+    eval_callback = EvalEveryNEpochsCallback(trainer, n=1, max_step=2000)
+    trainer.add_callback(eval_callback)
     train_out = trainer.train()
     return train_out
     
@@ -104,35 +111,41 @@ def self_supervised_train(
         stack_frame=4,
         max_len=100,
     )
+    
+    win_rate_round = []
     for round in range(num_rounds):
         print(f"sampling round {round}...")
         video_save_path = os.path.join("output/record", f"round-{round}")
-        model_save_path = os.path.join("output/self_supervised_tennis/", f"round-{round}")
         
         # sample agent dataset
         dataset_id = f"atari/tennis/selfsupervised-v{round}"
-        sample_dataset_using_model(
+        win_rate = sample_dataset_using_model(
             video_save_path, 
             model=model, 
-            num_episodes=sample_episodes//5*3, 
+            num_episodes=sample_episodes//5*4, 
             device=device,
             preprocessor=eval_preprocessor,
             dataset_id=dataset_id,
             save_video=True,
         )
-        single_agent_samples = load_data(dataset_id, sample_episodes//2)
+        win_rate_round.append(win_rate)
+        single_agent_samples = load_data(dataset_id, sample_episodes//5*4)
         
-        # sample multi-agent dataset
-        episodes_data = sample_mutli_agent_dataset_using_model(
-            save_path=video_save_path,
-            model=model,
-            num_episodes=sample_episodes//5*2,
-            preprocessor=eval_preprocessor,
-            device=device,
-            save_video=True,
-            return_dataset=True,
-        )
-        mutli_agent_samples = load_multi_agent_data(episodes_data)
+        try:
+            # sample multi-agent dataset
+            episodes_data = sample_mutli_agent_dataset_using_model(
+                save_path=video_save_path,
+                model=model,
+                num_episodes=sample_episodes//5*1,
+                preprocessor=eval_preprocessor,
+                device=device,
+                save_video=True,
+                return_dataset=True,
+            )
+            mutli_agent_samples = load_multi_agent_data(episodes_data)
+        except Exception as e:
+            print(f"mutli-agent sampling failed due to {e}, only use single-agent samples.")
+            mutli_agent_samples = []
         
         print(f"{len(mutli_agent_samples)} samples from mutli-agent sampling, {len(single_agent_samples)} samples from single-agent sampling.")
         samples = mutli_agent_samples + single_agent_samples
@@ -145,11 +158,11 @@ def self_supervised_train(
             img_preprocess=vision_transforms
         )
         
-        train(30, 16, model, samples, collactor, model_save_path)
-    
+        train(30, 16, model, samples, collactor, round)
+    print(win_rate_round)
     
 if __name__ == "__main__":
-    model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/checkpoint-22400"
+    model_path = "/root/SDSC6007_DecisionTransformerForTennis/output/tennis/best"
     self_supervised_round = 5
     sample_episodes = 10
     

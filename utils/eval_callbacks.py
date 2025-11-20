@@ -38,6 +38,9 @@ class EvalEveryNEpochsCallback(TrainerCallback):
         self.max_len = max_len
         self.trainer = trainer
         self.max_step = max_step
+        # keep track of the best metric seen so far (higher is better)
+        self.best_metric = None
+        self.best_dir = None
 
     def on_epoch_end(self, args, state, control, model, **kwargs):
         if state.epoch is None:
@@ -75,4 +78,43 @@ class EvalEveryNEpochsCallback(TrainerCallback):
             save_video=True,
             max_step=self.max_step,
         )
+        # Log the metric to the trainer (so it appears in TensorBoard / logs)
         self.trainer.log({"win_rate": reward_out})
+
+        # Save model if this is the best metric so far
+        try:
+            # reward_out expected to be a numeric scalar (higher is better)
+            current_metric = float(reward_out)
+        except Exception:
+            # if metric cannot be interpreted as float, skip saving
+            return control
+
+        improved = False
+        if self.best_metric is None or current_metric > self.best_metric:
+            improved = True
+
+        if improved:
+            self.best_metric = current_metric
+            # save to a stable "best" directory under the trainer output dir
+            best_dir = os.path.join(args.output_dir, "best")
+            os.makedirs(best_dir, exist_ok=True)
+
+            # trainer.save_model will save the model weights/config to the directory
+            try:
+                self.trainer.save_model(best_dir)
+                # also update trainer state so external tools can find the best checkpoint
+                try:
+                    self.trainer.state.best_model_checkpoint = best_dir
+                except Exception:
+                    # not critical
+                    pass
+                # record the path for reference
+                self.best_dir = best_dir
+                # log the save event
+                self.trainer.log({"best_model_saved_at": best_dir, "best_win_rate": self.best_metric})
+            except Exception as e:
+                # don't crash training because of save failure; just log
+                try:
+                    self.trainer.log({"best_model_save_error": str(e)})
+                except Exception:
+                    pass
